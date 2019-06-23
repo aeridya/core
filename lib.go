@@ -17,7 +17,7 @@ const (
 
 // Version returns a formatted string of the name/version number
 func Version() string {
-	return fmt.Sprintf("%s v%s.%s%s", NAME, MAJORVER, MINORVER, RELEASEVER)
+	return fmt.Sprintf("%s v%s.%s.%s", NAME, MAJORVER, MINORVER, RELEASEVER)
 }
 
 // Info returns a formatted string of Version and the Description

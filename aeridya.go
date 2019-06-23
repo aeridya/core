@@ -7,13 +7,9 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/gorilla/securecookie"
-
-	"github.com/hlfstr/configurit"
-	"github.com/hlfstr/quit"
-	"github.com/hlfstr/quit/quitters"
-
-	"github.com/aeridya/logit"
+	"github.com/aeridya/core/configurit"
+	"github.com/aeridya/core/logit"
+	"github.com/aeridya/core/quit"
 )
 
 var (
@@ -31,9 +27,6 @@ var (
 	Serve func(*Response)
 	Error func(*Response)
 
-	cookieHash  []byte
-	cookieBlock []byte
-
 	isInit  bool
 	limiter chan struct{}
 )
@@ -44,10 +37,10 @@ func Create(conf string) error {
 	if err != nil {
 		return err
 	}
-	quitters.AddQuit(quit.Quit)
-	quitters.AddQuit(logit.Quit)
+	quit.AddQuit(shutdown)
+	quit.AddQuit(logit.Quit)
 	Handle = newHandler()
-	cookieHandler = securecookie.New(cookieHash, cookieBlock)
+
 	if HTTPS {
 		FullDomain = "https://" + Domain
 	} else {
@@ -58,41 +51,35 @@ func Create(conf string) error {
 	return nil
 }
 
+// Load the Configuration options from the Configuration
 func loadConfig(conf string) (*configurit.Conf, error) {
+	// Open configuration file
 	c, err := configurit.Open(conf)
 	if err != nil {
 		return nil, err
 	}
 
-	if Domain, err = c.GetString("", "Domain"); err != nil {
+	// Load Domain name
+	if Domain, err = c.GetString("Aeridya", "Domain"); err != nil {
 		return nil, err
 	}
 
-	if s, err := c.GetString("", "Port"); err != nil {
+	// Load Port
+	if s, err := c.GetString("Aeridya", "Port"); err != nil {
 		return nil, err
 	} else {
 		Port = ":" + s
 	}
 
-	if n, err := c.GetInt("", "Workers"); err != nil {
+	// Load Workers amount
+	if n, err := c.GetInt("Aeridya", "Workers"); err != nil {
 		return nil, err
 	} else {
 		limiter = make(chan struct{}, n)
 	}
 
-	if h, err := c.GetString("", "CookieHash"); err != nil {
-		return nil, err
-	} else {
-		cookieHash = []byte(h)
-	}
-
-	if h, err := c.GetString("", "CookieBlock"); err != nil {
-		return nil, err
-	} else {
-		cookieBlock = []byte(h)
-	}
-
-	if log, err := c.GetString("", "Log"); err != nil {
+	// Load log location
+	if log, err := c.GetString("Aeridya", "Log"); err != nil {
 		return nil, err
 	} else {
 		if log == "stdout" {
@@ -110,11 +97,13 @@ func loadConfig(conf string) (*configurit.Conf, error) {
 		}
 	}
 
-	if Development, err = c.GetBool("", "Development"); err != nil {
+	// Load Development setting
+	if Development, err = c.GetBool("Aeridya", "Development"); err != nil {
 		return nil, err
 	}
 
-	if HTTPS, err = c.GetBool("", "HTTPS"); err != nil {
+	// Load HTTPS setting
+	if HTTPS, err = c.GetBool("Aeridya", "HTTPS"); err != nil {
 		return nil, err
 	}
 
@@ -126,17 +115,16 @@ func Run() error {
 		return fmt.Errorf("Aeridya[Error]: Must use Create(\"/path/to/config\") before Run()")
 	}
 	Config = nil //Delete the Config reference, FREE THE MEMORY!!
-	go quit.Run(shutdown, shutdown)
+	go quit.Run(quit.Quit, shutdown)
 	defer panicAttack()
-	defer quitters.Quit()
+	defer quit.Exit()
 	logit.Logf(logit.MSG, "Starting %s for %s | Listening on %s", Version(), Domain, Port)
-	http.Handle("/", Handle.Final(http.HandlerFunc(serve)))
+	http.Handle("/", Handle.Final(limit(http.HandlerFunc(serve))))
 	err := server.ListenAndServe()
 	if err != http.ErrServerClosed {
 		logit.LogError(1, err)
 		return nil
 	}
-	logit.Logf(0, "Shutting Down Aeridya for %s", Domain)
 	return nil
 }
 
@@ -192,6 +180,7 @@ func shutdown() {
 		logit.LogError(1, err)
 		server.Close()
 	}
+	logit.Logf(0, "Shutting Down Aeridya for %s", Domain)
 }
 
 func panicAttack() {
