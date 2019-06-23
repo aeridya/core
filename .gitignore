@@ -1,0 +1,11 @@
+#Don't include any file with .d
+*.d
+
+#Don't include any .note
+*.note
+
+#Don't include any .sh
+*.sh
+
+#Don't include .log file
+*.log
