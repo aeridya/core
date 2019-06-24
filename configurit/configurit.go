@@ -13,13 +13,17 @@ type Conf struct {
 	Name   string
 }
 
-func Open(path string) (*Conf, error) {
-	c := new(Conf)
-	c.config = make(map[string]map[string]string)
-	c.makeSection("")
-	c.Name = path
-	e := c.readConfig(path)
-	return c, e
+var (
+	Config *Conf
+)
+
+func Open(path string) error {
+	Config = new(Conf)
+	Config.config = make(map[string]map[string]string)
+	Config.makeSection("")
+	Config.Name = path
+	e := Config.readConfig(path)
+	return e
 }
 
 func (c *Conf) makeSection(key string) {

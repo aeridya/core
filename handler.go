@@ -2,40 +2,44 @@ package core
 
 import (
 	"net/http"
+	"sort"
 )
 
-type Handler struct {
-	handlers []func(http.Handler) http.Handler
+var (
+	handlers map[int]func(http.Handler) http.Handler
+)
+
+// Init creates the handler map
+func init() {
+	handlers = make(map[int]func(http.Handler) http.Handler, 0)
 }
 
-func newHandler() *Handler {
-	h := new(Handler)
-	h.handlers = make([]func(http.Handler) http.Handler, 0)
-	return h
+// GetHandler returns the current handler map
+func GetHandler() map[int]func(http.Handler) http.Handler {
+	return handlers
 }
 
-func (h *Handler) Init() {
-	h.handlers = make([]func(http.Handler) http.Handler, 0)
+// AddHandler adds an http Handler to the map, requires a priority set
+func AddHandler(priority int, handle func(http.Handler) http.Handler) {
+	handlers[priority] = handle
 }
 
-func (h Handler) Get() []func(http.Handler) http.Handler {
-	return h.handlers
+// DeleteHandler removes an httpHandler based on the priority set
+func DeleteHandler(priority int) {
+	delete(handlers, priority)
 }
 
-func (h *Handler) AddHandler(handle func(http.Handler) http.Handler) {
-	h.handlers = append(h.handlers, handle)
-}
-
-func (h *Handler) AppendHandlers(hands []func(http.Handler) http.Handler) {
-	for i := range hands {
-		h.handlers = append(h.handlers, hands[i])
+// handler returns the final http handler from the map
+// Builds the final handler based on the priorities
+func handler(a http.Handler) http.Handler {
+	out := a
+	keys := make([]int, 0)
+	for i := range handlers {
+		keys = append(keys, i)
 	}
-}
-
-func (c *Handler) Final(a http.Handler) http.Handler {
-	handle := a
-	for i := range c.handlers {
-		handle = c.handlers[len(c.handlers)-1-i](handle)
+	sort.Ints(keys)
+	for _, i := range keys {
+		out = handlers[i](out)
 	}
-	return handle
+	return out
 }

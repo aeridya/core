@@ -13,11 +13,6 @@ import (
 )
 
 var (
-	server *http.Server
-
-	Handle *Handler
-	Config *configurit.Conf
-
 	Port        string
 	Domain      string
 	FullDomain  string
@@ -29,105 +24,120 @@ var (
 
 	isInit  bool
 	limiter chan struct{}
+
+	server *http.Server
 )
 
+//Create loads the configuration file and sets Aeridya up
 func Create(conf string) error {
 	var err error
-	Config, err = loadConfig(conf)
+	err = loadConfig(conf)
 	if err != nil {
 		return err
 	}
+
 	quit.AddQuit(shutdown)
 	quit.AddQuit(logit.Quit)
-	Handle = newHandler()
+	AddHandler(1000, limit)
 
 	if HTTPS {
 		FullDomain = "https://" + Domain
 	} else {
 		FullDomain = "http://" + Domain
 	}
+
 	server = &http.Server{Addr: Port}
+
 	isInit = true
 	return nil
 }
 
 // Load the Configuration options from the Configuration
-func loadConfig(conf string) (*configurit.Conf, error) {
+func loadConfig(conf string) error {
 	// Open configuration file
-	c, err := configurit.Open(conf)
+	err := configurit.Open(conf)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Load Domain name
-	if Domain, err = c.GetString("Aeridya", "Domain"); err != nil {
-		return nil, err
+	if Domain, err = configurit.Config.GetString("Aeridya", "Domain"); err != nil {
+		return err
 	}
 
 	// Load Port
-	if s, err := c.GetString("Aeridya", "Port"); err != nil {
-		return nil, err
+	if s, err := configurit.Config.GetString("Aeridya", "Port"); err != nil {
+		return err
 	} else {
 		Port = ":" + s
 	}
 
 	// Load Workers amount
-	if n, err := c.GetInt("Aeridya", "Workers"); err != nil {
-		return nil, err
+	if n, err := configurit.Config.GetInt("Aeridya", "Workers"); err != nil {
+		return err
 	} else {
 		limiter = make(chan struct{}, n)
 	}
 
 	// Load log location
-	if log, err := c.GetString("Aeridya", "Log"); err != nil {
-		return nil, err
+	if log, err := configurit.Config.GetString("Aeridya", "Log"); err != nil {
+		return err
 	} else {
 		if log == "stdout" {
 			if err = logit.Start(logit.TermLog()); err != nil {
-				return nil, err
+				return err
 			}
 		} else {
 			if file, err := logit.OpenFile(log); err != nil {
-				return nil, err
+				return err
 			} else {
 				if err = logit.Start(file); err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
 	}
 
 	// Load Development setting
-	if Development, err = c.GetBool("Aeridya", "Development"); err != nil {
-		return nil, err
+	if Development, err = configurit.Config.GetBool("Aeridya", "Development"); err != nil {
+		return err
 	}
 
 	// Load HTTPS setting
-	if HTTPS, err = c.GetBool("Aeridya", "HTTPS"); err != nil {
-		return nil, err
+	if HTTPS, err = configurit.Config.GetBool("Aeridya", "HTTPS"); err != nil {
+		return err
 	}
 
-	return c, err
+	return err
 }
 
+//Run starts the server, begins Aeridya
 func Run() error {
 	if !isInit {
 		return fmt.Errorf("Aeridya[Error]: Must use Create(\"/path/to/config\") before Run()")
 	}
-	Config = nil //Delete the Config reference, FREE THE MEMORY!!
-	go quit.Run(quit.Quit, shutdown)
+
+	//Start listening on the quits
+	quit.Run(quit.Quit, shutdown)
+	//Defer catching panics
 	defer panicAttack()
+	//Defer running the quits on exit
 	defer quit.Exit()
+
 	logit.Logf(logit.MSG, "Starting %s for %s | Listening on %s", Version(), Domain, Port)
-	http.Handle("/", Handle.Final(limit(http.HandlerFunc(serve))))
+
+	//Set the handler for Aeridya.  Using "/" does all URLs as well
+	http.Handle("/", handler(http.HandlerFunc(serve)))
+	//Run the server
 	err := server.ListenAndServe()
 	if err != http.ErrServerClosed {
 		logit.LogError(1, err)
-		return nil
+		return err
 	}
 	return nil
 }
 
+//serve is the function used on every connection to run the theme
 func serve(w http.ResponseWriter, r *http.Request) {
 	resp := &Response{W: w, R: r}
 	Serve(resp)
@@ -140,6 +150,7 @@ func serve(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+//limit is the internal handler function to limit the amount of connections
 func limit(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		limiter <- struct{}{}
@@ -148,33 +159,7 @@ func limit(h http.Handler) http.Handler {
 	})
 }
 
-/*
-func AddTrailingSlash(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		u := r.URL.Path
-		if u[len(u)-1:] != "/" {
-			u = u + "/"
-			http.Redirect(w, r, u, 301)
-			return
-		}
-		h.ServeHTTP(w, r)
-	})
-}
-
-func NoTrailingSlash(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		u := r.URL.Path
-		if u[len(u)-1:] == "/" {
-			u = u[:len(u)-1]
-			http.Redirect(w, r, u, 301)
-			return
-		}
-
-		h.ServeHTTP(w, r)
-	})
-}
-*/
-
+//shutdown closes the server
 func shutdown() {
 	if err := server.Shutdown(context.Background()); err != nil {
 		logit.LogError(1, err)
@@ -183,6 +168,8 @@ func shutdown() {
 	logit.Logf(0, "Shutting Down Aeridya for %s", Domain)
 }
 
+//panicAttack attempts to catch a panic made in Aeridya
+//will log the panic to via logit
 func panicAttack() {
 	err := recover()
 	if err != nil {

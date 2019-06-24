@@ -30,7 +30,7 @@ func AddQuit(f func()) {
 	quits = append(quits, f)
 }
 
-// Quit runs all quits functions
+// Quit runs all quit functions
 func Quit() {
 	for i := range quits {
 		quits[i]()
