@@ -3,6 +3,8 @@ package core
 import (
 	"net/http"
 	"sort"
+
+	"github.com/aeridya/core/logit"
 )
 
 var (
@@ -22,11 +24,17 @@ func GetHandler() map[int]func(http.Handler) http.Handler {
 // AddHandler adds an http Handler to the map, requires a priority set
 func AddHandler(priority int, handle func(http.Handler) http.Handler) {
 	handlers[priority] = handle
+	if Development {
+		logit.Logf(logit.DEBUG, "Added handler with priority %d", priority)
+	}
 }
 
 // DeleteHandler removes an httpHandler based on the priority set
 func DeleteHandler(priority int) {
 	delete(handlers, priority)
+	if Development {
+		logit.Logf(logit.DEBUG, "Deleted handler with priority %d", priority)
+	}
 }
 
 // handler returns the final http handler from the map
@@ -38,6 +46,9 @@ func handler(a http.Handler) http.Handler {
 		keys = append(keys, i)
 	}
 	sort.Ints(keys)
+	if Development {
+		logit.Logf(logit.DEBUG, "Handlers active by priority: %v", keys)
+	}
 	for _, i := range keys {
 		out = handlers[i](out)
 	}

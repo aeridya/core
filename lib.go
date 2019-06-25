@@ -10,7 +10,7 @@ const (
 	//MINORVER is the Minor Version
 	MINORVER = "0"
 	//RELEASEVER is the Release Version
-	RELEASEVER = "0"
+	RELEASEVER = "1"
 	//DESC is a description of the library
 	DESC = "Server and CMS"
 )

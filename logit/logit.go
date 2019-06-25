@@ -16,8 +16,10 @@ func (s Status) String() string {
 	case 2:
 		return " *DEBUG*"
 	case 3:
-		return " -Error-"
+		return " NOTICE:"
 	case 4:
+		return " -Error-"
+	case 5:
 		return " !Panic!"
 	default:
 		return ""
@@ -28,6 +30,7 @@ const (
 	MSG Status = iota
 	WARN
 	DEBUG
+	NOTICE
 	ERROR
 	PANIC
 )

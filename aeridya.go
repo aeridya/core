@@ -38,12 +38,25 @@ func Create(conf string) error {
 
 	quit.AddQuit(shutdown)
 	quit.AddQuit(logit.Quit)
-	AddHandler(1000, limit)
+
+	if Development {
+		logit.Log(logit.NOTICE, "Development mode enabled")
+	}
 
 	if HTTPS {
 		FullDomain = "https://" + Domain
 	} else {
 		FullDomain = "http://" + Domain
+	}
+
+	if Development {
+		logit.Log(logit.DEBUG, "Working Domain: ", FullDomain)
+	}
+
+	if limiter == nil {
+		logit.Log(logit.NOTICE, "Limiter disabled due to configuration")
+	} else {
+		AddHandler(1000, limit)
 	}
 
 	server = &http.Server{Addr: Port}
@@ -76,7 +89,9 @@ func loadConfig(conf string) error {
 	if n, err := configurit.Config.GetInt("Aeridya", "Workers"); err != nil {
 		return err
 	} else {
-		limiter = make(chan struct{}, n)
+		if n > 0 {
+			limiter = make(chan struct{}, n)
+		}
 	}
 
 	// Load log location
@@ -128,23 +143,27 @@ func Run() error {
 
 	//Set the handler for Aeridya.  Using "/" does all URLs as well
 	http.Handle("/", handler(http.HandlerFunc(serve)))
+	if Development {
+		logit.Log(logit.DEBUG, "Aeridya server starting...")
+	}
 	//Run the server
 	err := server.ListenAndServe()
 	if err != http.ErrServerClosed {
 		logit.LogError(1, err)
 		return err
 	}
+	logit.Log(logit.DEBUG, "Aeridya server shutting down...")
 	return nil
 }
 
 //serve is the function used on every connection to run the theme
 func serve(w http.ResponseWriter, r *http.Request) {
-	resp := &Response{W: w, R: r}
+	resp := mkResponse(w, r)
 	Serve(resp)
 	if resp.Err != nil {
 		Error(resp)
 		if Development {
-			logit.Logf(logit.ERROR, "[Error(%d)] %s", resp.Status, resp.Err.Error())
+			logit.Logf(logit.DEBUG, "[Error(%d)] %s", resp.Status, resp.Err.Error())
 		}
 	}
 	return
