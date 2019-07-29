@@ -26,6 +26,15 @@ var (
 	limiter chan struct{}
 
 	server *http.Server
+
+	UseSSL bool
+
+	AutoSSL          bool
+	AutoSSLDirectory string
+
+	HTTPSPort string
+	SSLCert   string
+	SSLKey    string
 )
 
 //Create loads the configuration file and sets Aeridya up
@@ -36,8 +45,8 @@ func Create(conf string) error {
 		return err
 	}
 
-	quit.AddQuit(shutdown)
-	quit.AddQuit(logit.Quit)
+	quit.Add(shutdown)
+	quit.Add(logit.Quit)
 
 	if Development {
 		logit.Log(logit.NOTICE, "Development mode enabled")
@@ -59,7 +68,7 @@ func Create(conf string) error {
 		AddHandler(1000, limit)
 	}
 
-	server = &http.Server{Addr: Port}
+	server = &http.Server{}
 
 	isInit = true
 	return nil
@@ -111,6 +120,44 @@ func loadConfig(conf string) error {
 				}
 			}
 		}
+
+		if ok := configurit.Config.SectionExist("SSL"); ok {
+			if UseSSL, err = configurit.Config.GetBool("SSL", "UseSSL"); err != nil {
+				return err
+			}
+			if UseSSL {
+				HTTPS = true
+			}
+			if AutoSSL, err = configurit.Config.GetBool("SSL", "AutoSSL"); err != nil {
+				return err
+			} else {
+				if AutoSSL {
+					Port = ":80"
+					HTTPSPort = ":443"
+					if f, err := configurit.Config.GetString("SSL", "AutoSSLDirectory"); err != nil {
+						return err
+					} else {
+						AutoSSLDirectory = f
+					}
+				} else {
+					if p, err := configurit.Config.GetString("SSL", "HTTPSPort"); err != nil {
+						return err
+					} else {
+						HTTPSPort = ":" + p
+					}
+					if p, err := configurit.Config.GetString("SSL", "SSLCert"); err != nil {
+						return err
+					} else {
+						SSLCert = p
+					}
+					if p, err := configurit.Config.GetString("SSL", "SSLKey"); err != nil {
+						return err
+					} else {
+						SSLKey = p
+					}
+				}
+			}
+		}
 	}
 
 	// Load Development setting
@@ -146,11 +193,33 @@ func Run() error {
 	if Development {
 		logit.Log(logit.DEBUG, "Aeridya server starting...")
 	}
-	//Run the server
-	err := server.ListenAndServe()
-	if err != http.ErrServerClosed {
-		logit.LogError(1, err)
-		return err
+	if UseSSL {
+		if AutoSSL {
+			cm := autoSSL()
+			server.Addr = HTTPSPort
+			server.TLSConfig = cm.TLSConfig()
+			err := server.ListenAndServeTLS("", "")
+			if err != http.ErrServerClosed {
+				logit.LogError(1, err)
+				return err
+			}
+		} else {
+			server.Addr = HTTPSPort
+			go http.ListenAndServe(Port, http.HandlerFunc(http2https))
+			err := server.ListenAndServeTLS(SSLCert, SSLKey)
+			if err != http.ErrServerClosed {
+				logit.LogError(1, err)
+				return err
+			}
+		}
+	} else {
+		//Run the server
+		server.Addr = Port
+		err := server.ListenAndServe()
+		if err != http.ErrServerClosed {
+			logit.LogError(1, err)
+			return err
+		}
 	}
 	logit.Log(logit.DEBUG, "Aeridya server shutting down...")
 	return nil

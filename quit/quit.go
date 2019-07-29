@@ -26,7 +26,7 @@ func init() {
 
 // AddQuit will add the function passed to the
 // quits array
-func AddQuit(f func()) {
+func Add(f func()) {
 	quits = append(quits, f)
 }
 
@@ -78,6 +78,7 @@ loop:
 		case <-done:
 			quit()
 			isDone = true
+			done <- true
 			break loop
 		}
 	}

@@ -151,3 +151,8 @@ func (c Conf) GetBool(section string, key string) (bool, error) {
 	}
 	return o, nil
 }
+
+func (c Conf) SectionExist(key string) bool {
+	_, ok := c.config[strings.ToLower(key)]
+	return ok
+}

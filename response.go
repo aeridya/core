@@ -24,7 +24,9 @@ type Response struct {
 // mkResponse returns a Response, parses the form in the connection
 func mkResponse(w http.ResponseWriter, r *http.Request) *Response {
 	out := &Response{W: w, R: r}
-	out.R.ParseForm()
+	if out.R.Method == "POST" {
+		out.R.ParseForm()
+	}
 	return out
 }
 
@@ -35,16 +37,22 @@ func (r *Response) Good(status int) {
 	r.W.WriteHeader(status)
 }
 
+func (r *Response) Return(status int, data []byte) {
+	r.Status = status
+	r.W.WriteHeader(status)
+	r.W.Write(data)
+}
+
 // Bad takes a status and returns connection as an error
 //// Recommended: 400+, 500+
 func (r *Response) Bad(status int, msg string) {
 	r.Status = status
-	r.error(msg)
+	r.Error(msg)
 	r.W.WriteHeader(status)
 }
 
 // error creates an error object from a string, sets it in response
-func (r *Response) error(msg string) {
+func (r *Response) Error(msg string) {
 	r.Err = errors.New(msg)
 }
 
@@ -61,4 +69,16 @@ func (r *Response) Redirect(status int, url string) {
 func (r *Response) GetData(key string) (string, bool) {
 	o, e := r.R.Form[key]
 	return strings.Join(o, ""), e
+}
+
+func (r *Response) GetDataValues(keys ...string) ([]string, bool) {
+	out := make([]string, 0)
+	for i := range keys {
+		o, e := r.R.Form[keys[i]]
+		if !e {
+			return nil, false
+		}
+		out = append(out, strings.Join(o, ""))
+	}
+	return out, true
 }
